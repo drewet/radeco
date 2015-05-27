@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["AdjacentEdges",""],["AdjacentSources",""],["AdjacentTargets",""],["DepthFirstTraversal",""],["Direction",""],["Edge",""],["EdgeIndex",""],["Graph",""],["Node",""],["NodeIndex",""]],"fn":[["each_edge_index",""]],"constant":[["INCOMING",""],["INVALID_EDGE_INDEX",""],["OUTGOING",""]]});
