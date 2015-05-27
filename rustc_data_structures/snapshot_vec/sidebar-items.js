@@ -1,1 +1,0 @@
-initSidebarItems({"trait":[["SnapshotVecDelegate",""]],"struct":[["Snapshot",""],["SnapshotVec",""]],"enum":[["UndoLog",""]]});
