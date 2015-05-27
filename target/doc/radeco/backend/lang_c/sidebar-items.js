@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["serialize","Serializes SCFNodes for debugging purposes. TODO: Newlines and indentation, also cover all constructs"]]});
