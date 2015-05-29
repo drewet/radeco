@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["parse",""]]});
+initSidebarItems({"struct":[["Instruction",""],["Operator",""],["Parser",""],["Value","Value is used to represent operands to an operator in a statement."]],"enum":[["Arity",""],["Location",""]]});

@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["esil","ESIL (Evaluable Strings Intermediate Language) is the IL used by radare2. For a complete documentation of ESIL please checkout:   * https://github.com/radare/radare2/wiki/ESIL This module is used to parse ESIL strings and convert them into the IR."]]});
+initSidebarItems({"mod":[["esil","Module to parse ESIL strings and convert them into the IR."]]});

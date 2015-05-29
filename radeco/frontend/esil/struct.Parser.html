@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="rustdoc">
-    <meta name="description" content="API documentation for the Rust `serialize` fn in crate `radeco`.">
-    <meta name="keywords" content="rust, rustlang, rust-lang, serialize">
+    <meta name="description" content="API documentation for the Rust `Parser` struct in crate `radeco`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Parser">
 
-    <title>radeco::backend::lang_c::serialize - Rust</title>
+    <title>radeco::frontend::esil::Parser - Rust</title>
 
     <link rel="stylesheet" type="text/css" href="../../../main.css">
 
@@ -26,7 +26,7 @@
 
     <section class="sidebar">
         
-        <p class='location'><a href='../../index.html'>radeco</a>::<wbr><a href='../index.html'>backend</a>::<wbr><a href='index.html'>lang_c</a></p><script>window.sidebarCurrent = {name: 'serialize', ty: 'fn', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+        <p class='location'><a href='../../index.html'>radeco</a>::<wbr><a href='../index.html'>frontend</a>::<wbr><a href='index.html'>esil</a></p><script>window.sidebarCurrent = {name: 'Parser', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
     </section>
 
     <nav class="sub">
@@ -40,12 +40,15 @@
         </form>
     </nav>
 
-    <section id='main' class="content fn">
-<h1 class='fqn'><span class='in-band'>Function <a href='../../index.html'>radeco</a>::<wbr><a href='../index.html'>backend</a>::<wbr><a href='index.html'>lang_c</a>::<wbr><a class='fn' href=''>serialize</a><wbr></span><span class='out-of-band'><span id='render-detail'>
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../../index.html'>radeco</a>::<wbr><a href='../index.html'>frontend</a>::<wbr><a href='index.html'>esil</a>::<wbr><a class='struct' href=''>Parser</a><wbr></span><span class='out-of-band'><span id='render-detail'>
             <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
-        </span><a id='src-1454' href='../../../src/radeco/backend/lang_c/mod.rs.html#4-14'>[src]</a></span></h1>
-<pre class='rust fn'>pub fn serialize(n: &amp;<a class='enum' href='../../../radeco/backend/scf/enum.SCFNode.html' title='radeco::backend::scf::SCFNode'>SCFNode</a>&lt;<a class='struct' href='../../../radeco/backend/struct.D.html' title='radeco::backend::D'>D</a>&gt;) -&gt; <a class='struct' href='http://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a></pre><div class='docblock'><p>Serializes SCFNodes for debugging purposes.
-TODO: Newlines and indentation, also cover all constructs</p>
+        </span><a id='src-1076' href='../../../src/radeco/frontend/esil/mod.rs.html#199-206'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Parser&lt;'a&gt; {
+    // some fields omitted
+}</pre><h2 id='methods'>Methods</h2><h3 class='impl'><a class='stability Unmarked' title='No stability level'></a><code>impl&lt;'a&gt; <a class='struct' href='../../../radeco/frontend/esil/struct.Parser.html' title='radeco::frontend::esil::Parser'>Parser</a>&lt;'a&gt;</code></h3><div class='impl-items'><h4 id='method.new' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../../../radeco/frontend/esil/struct.Parser.html' title='radeco::frontend::esil::Parser'>Parser</a>&lt;'a&gt;</code></h4>
+<h4 id='method.parse' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.parse' class='fnname'>parse</a>(&amp;mut self, esil: &amp;'a <a href='http://doc.rust-lang.org/nightly/std/primitive.str.html'>str</a>)</code></h4>
+<h4 id='method.emit_insts' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.emit_insts' class='fnname'>emit_insts</a>(&amp;self) -&gt; <a class='struct' href='http://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='../../../radeco/frontend/esil/struct.Instruction.html' title='radeco::frontend::esil::Instruction'>Instruction</a>&lt;'a&gt;&gt;</code></h4>
 </div></section>
     <section id='search' class="content hidden"></section>
 

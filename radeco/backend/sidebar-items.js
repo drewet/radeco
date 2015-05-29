@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["lang_c",""],["scf",""]],"struct":[["D",""]]});
+initSidebarItems({"struct":[["D",""]],"mod":[["lang_c",""],["scf",""]]});
