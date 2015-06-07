@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["esil","Module to parse ESIL strings and convert them into the IR."]]});
+initSidebarItems({"mod":[["cfg","This module is used to convert the instructions generated from esil into a CFG."],["dot","Module to parse and write dot files for graphs."],["esil","Module to parse ESIL strings and convert them into the IR."]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["ScannableSet","A value set over a totally ordered domain with methods to query the next greater or smaller value"],["ValueSet","A value set"]],"struct":[["KnownBits","Value set described by bits set/cleared in the u64"],["SIntRange",""],["UIntMultiple",""],["UIntRange",""]]});

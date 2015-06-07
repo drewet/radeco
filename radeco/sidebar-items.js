@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["backend",""],["frontend",""]]});
+initSidebarItems({"mod":[["analysis",""],["backend",""],["frontend",""],["util",""]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["NodeTrait","A trait group for **GraphMap**'s node identifier."]],"struct":[["Edges",""],["GraphMap","**GraphMap<N, E>** is an undirected graph, with generic node values **N** and edge weights **E**."],["Neighbors",""],["Nodes",""]]});
