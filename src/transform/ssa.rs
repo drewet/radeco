@@ -82,6 +82,12 @@ impl<'a> SSAConstruction<'a> {
 		return n
 	}
 
+	pub fn add_block(&mut self) -> Block {
+		let block = self.ssa.add_block();
+		self.incomplete_phis.insert(block, HashMap::new());
+		block
+	}
+
 	pub fn seal_block(&mut self, block: Block) {
 		let inc = self.incomplete_phis[&block].clone(); // TODO: remove clone
 
@@ -90,6 +96,7 @@ impl<'a> SSAConstruction<'a> {
 		}
 		self.sealed_blocks.insert(block);
 	}
+
 	/*
 	pub fn run(&mut self, cfg: &CFG) {
 		let mut blocks = Vec::<Block>::new();

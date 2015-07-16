@@ -1,5 +1,7 @@
 #![doc(html_root_url = "https://radare.github.io/radeco/")]
 #![doc(html_logo_url = "http://rada.re/r/img/r2logo3.png")]
+#![feature(collections_bound)]
+#![feature(btree_range)]
 extern crate regex;
 extern crate petgraph;
 extern crate rustc_serialize;

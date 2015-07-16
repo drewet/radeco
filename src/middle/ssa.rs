@@ -303,7 +303,10 @@ impl GraphDot for SSAStorage {
 	}
 
 	fn node_attrs(&self, node: &NodeData) -> DotAttrBlock {
-		let l = format!("{:?}", node);
+		let l = match node {
+			&NodeData::Op(opc, ValueType::Integer{width: w}) => format!("[i{}] {:?}", w, opc),
+			_ => format!("{:?}", node)
+		};
 		DotAttrBlock::Raw(format!(" [label=\"{}\"]", l.replace("\"", "\\\"")))
 	}
 }

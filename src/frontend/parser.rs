@@ -2,6 +2,8 @@
 
 use num::traits::Num;
 
+use std::collections::Bound;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::cmp;
 use regex::Regex;
@@ -57,6 +59,8 @@ pub struct Parser<'a> {
     last_assgn:   MVal,
     ssac:         Option<SSAConstruction<'a>>, // TODO: Remove the Option<> here
     block:        NodeIndex,
+    bbs:          BTreeMap<Address, (NodeIndex, Address)>,
+    bbworklist:   Vec<Address>
 }
 
 // Struct used to configure the Parser. If `None` is passed to any of the fields, then the default
@@ -112,12 +116,16 @@ impl<'a> Parser<'a> {
             tmp_index:    0,
             last_assgn:   val,
             ssac:         None,
-            block:        Block::end()
+            block:        Block::end(),
+            bbs:          BTreeMap::new(),
+            bbworklist:   Vec::new()
         }
     }
 
     pub fn set_register_profile(&mut self, reg_info: &LRegInfo, ssa: &'a mut SSAStorage) {
         self.ssac = Some(SSAConstruction::new(ssa, reg_info));
+
+        if let Some(ref mut ssac) = self.ssac { self.block = ssac.add_block(); } else { unreachable!(); } // TODO: Remove this
 
         self.regset = HashMap::new();
         let mut tmp: HashMap<String, LAliasInfo> = HashMap::new();
@@ -132,6 +140,35 @@ impl<'a> Parser<'a> {
         }
 
         self.alias_info = tmp.clone();
+    }
+
+    pub fn run(&mut self) {
+        // TODO: Accept hints on bb beginnings (with corresponding entries in self.bbworklist and self.bbs)
+        while let Some(top) = self.bbworklist.pop() {
+            if let Some((&addr, &(ni, end))) = self.bbs.range(Bound::Unbounded, Bound::Included(&top)).next_back() {
+                if addr == top && ni != NodeIndex::end() {
+                    // this block already exists
+                    continue;
+                } else if top < end {
+                    // we overlap with a previous block
+                    self.bbworklist.push(addr); // reenqueue overlapping block
+                    // TODO: Correct disposal of old node
+                    self.bbs.insert(addr, (NodeIndex::end(), addr));
+                }
+            }
+            let nbound = if let Some((&naddr, &nni)) = self.bbs.range(Bound::Excluded(&top), Bound::Unbounded).next() {
+                Bound::Excluded(naddr)
+            } else {
+                Bound::Unbounded
+            };
+            self.block = {
+                let ssac = self.ssac.as_mut().unwrap();
+                ssac.add_block()
+            };
+            let pc = top;
+            // TODO: process instructions, advance 'pc'
+            self.bbs.insert(top, (self.block, pc));
+        }
     }
 
     pub fn set_flags(&mut self, flags: &Vec<LFlagInfo>) {
@@ -362,7 +399,7 @@ impl<'a> Parser<'a> {
         let operator = MOpcode::OpWiden(size);
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(operator, dst.clone(), op.clone(), MVal::null(), Some(addr));
-        self.insts.push(inst.clone());
+        self.push_inst(inst.clone());
         *op = dst;
     }
 
@@ -375,7 +412,7 @@ impl<'a> Parser<'a> {
         let operator = MOpcode::OpNarrow(size);
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(operator, dst.clone(), op.clone(), MVal::null(), Some(addr));
-        self.insts.push(inst.clone());
+        self.push_inst(inst.clone());
         *op = dst;
     }
 
@@ -396,7 +433,7 @@ impl<'a> Parser<'a> {
 
             let addr = MAddr::new(self.addr);
             let inst = MInst::new(op, MVal::null(), op1, MVal::null(), Some(addr));
-            self.insts.push(inst.clone());
+            self.push_inst(inst.clone());
             return Ok(());
         }
 
@@ -408,7 +445,7 @@ impl<'a> Parser<'a> {
         if dst.size == op1.size {
             let addr = MAddr::new(self.addr);
             let inst = MInst::new(op, dst.clone(), op1, MVal::null(), Some(addr));
-            self.insts.push(inst.clone());
+            self.push_inst(inst.clone());
             return Ok(());
         }
 
@@ -431,7 +468,7 @@ impl<'a> Parser<'a> {
                 let null = MVal::null();
                 let addr = MAddr::new(self.addr);
                 let inst = MInst::new(op, null.clone(), null.clone(), null.clone(), Some(addr));
-                self.insts.push(inst.clone());
+                self.push_inst(inst.clone());
                 return Ok(());
             },
             MOpcode::OpInc |
@@ -470,7 +507,7 @@ impl<'a> Parser<'a> {
         if op == MOpcode::OpIf {
             let addr = MAddr::new(self.addr);
             let inst = MInst::new(op, MVal::null(), op2, op1, Some(addr));
-            self.insts.push(inst);
+            self.push_inst(inst);
             return Ok(());
         }
 
@@ -502,7 +539,7 @@ impl<'a> Parser<'a> {
 
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(op, dst.clone(), op2, op1, Some(addr));
-        self.insts.push(inst);
+        self.push_inst(inst);
         self.stack.push(dst);
 
         Ok(())
@@ -522,7 +559,7 @@ impl<'a> Parser<'a> {
                         'z' => {
                             let dst = self.get_tmp_register(1);
                             let inst = MInst::new(MOpcode::OpCmp, dst.clone(), self.last_assgn.clone(), self.constant_value(0), Some(addr));
-                            self.insts.push(inst);
+                            self.push_inst(inst);
                             dst
                         },
                         //'b' => _ // OpIFBorrow(u8),
@@ -547,11 +584,13 @@ impl<'a> Parser<'a> {
         let dst = self.get_tmp_register(size);
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(op, dst.clone(), MVal::null(), MVal::null(), Some(addr));
-        self.insts.push(inst);
+        self.push_inst(inst);
         dst
     }
 
     fn push_inst(&mut self, instruction: MInst) {
+        self.insts.push(instruction.clone());
+
         let block = self.block;
         let n0 = self.process_in(block, &instruction.operand_1);
         let n1 = self.process_in(block, &instruction.operand_2);
@@ -574,6 +613,7 @@ impl<'a> Parser<'a> {
 
     fn process_in(&mut self, block: Block, mval: &MVal) -> Node {
         let ssac = self.ssac.as_mut().unwrap();
+
         match mval.val_type {
             MValType::Register  => ssac.read_variable(block, mval.name.clone()),
             MValType::Temporary => ssac.read_variable(block, mval.name.clone()),
