@@ -5,11 +5,12 @@ use num::traits::Num;
 use std::collections::HashMap;
 use std::cmp;
 use regex::Regex;
+use petgraph::graph::NodeIndex;
 
 use super::{MInst, MVal, MOpcode, MValType, Address, MArity, MRegInfo, MAddr};
 use super::structs::{LOpInfo, LAliasInfo, LRegInfo, LRegProfile, LFlagInfo};
-use super::super::middle::ssa::{SSAStorage, SSA};
-use super::super::transform::ssa::SSAConstruction;
+use super::super::middle::ssa::{SSAStorage, SSA, ValueType};
+use super::super::transform::ssa::{SSAConstruction, Node, Block};
 
 // Macro to return a new hash given (key, value) tuples.
 // Example: hash![("foo", "bar"), ("bar", "baz")]
@@ -54,7 +55,8 @@ pub struct Parser<'a> {
     opinfo:       Option<LOpInfo>,
     tmp_index:    u64,
     last_assgn:   MVal,
-    ssac:         Option<SSAConstruction<'a>>,
+    ssac:         Option<SSAConstruction<'a>>, // TODO: Remove the Option<> here
+    block:        NodeIndex,
 }
 
 // Struct used to configure the Parser. If `None` is passed to any of the fields, then the default
@@ -110,6 +112,7 @@ impl<'a> Parser<'a> {
             tmp_index:    0,
             last_assgn:   val,
             ssac:         None,
+            block:        Block::end()
         }
     }
 
@@ -546,6 +549,61 @@ impl<'a> Parser<'a> {
         let inst = MInst::new(op, dst.clone(), MVal::null(), MVal::null(), Some(addr));
         self.insts.push(inst);
         dst
+    }
+
+    fn push_inst(&mut self, instruction: MInst) {
+        let block = self.block;
+        let n0 = self.process_in(block, &instruction.operand_1);
+        let n1 = self.process_in(block, &instruction.operand_2);
+
+        if instruction.opcode == MOpcode::OpJmp {
+            //TODO
+            //self.ssa.g.add_edge(block, n0, SSAEdgeData::DynamicControl(0));
+            return;
+        }
+
+        // TODO
+        // if instruction.opcode == MOpcode::OpCJmp {
+        //     self.ssa.mark_selector(n0);
+        //     continue;
+        // }
+
+        let nn = self.process_op(block, instruction.opcode, n0, n1);
+        self.process_out(block, &instruction.dst, nn);
+    }
+
+    fn process_in(&mut self, block: Block, mval: &MVal) -> Node {
+        let ssac = self.ssac.as_mut().unwrap();
+        match mval.val_type {
+            MValType::Register  => ssac.read_variable(block, mval.name.clone()),
+            MValType::Temporary => ssac.read_variable(block, mval.name.clone()),
+            MValType::Unknown   => ssac.ssa.add_comment(block, &"Unknown".to_string()), // unimplemented!()
+            MValType::Internal  => ssac.ssa.add_comment(block, &mval.name), // unimplemented!()
+            MValType::Null      => NodeIndex::end(),
+        }
+    }
+
+    fn process_out(&mut self, block: Block, mval: &MVal, value: Node) {
+        let ssac = self.ssac.as_mut().unwrap();
+        match mval.val_type {
+            MValType::Register  => ssac.write_variable(block, mval.name.clone(), value),
+            MValType::Temporary => ssac.write_variable(block, mval.name.clone(), value),
+            MValType::Unknown   => {}, // unimplemented!(),
+            MValType::Internal  => {}, // unimplemented!()
+            MValType::Null      => {},
+        }
+    }
+
+    fn process_op(&mut self, block: Block, opc: MOpcode, n0: Node, n1: Node) -> Node {
+        let ssac = self.ssac.as_mut().unwrap();
+        if opc == MOpcode::OpEq {
+            return n0
+        }
+        // TODO: give correct integer type here
+        let nn = ssac.ssa.add_op(block, opc, ValueType::Integer{width: 64});
+        ssac.ssa.op_use(nn, 0, n0);
+        ssac.ssa.op_use(nn, 1, n1);
+        return nn
     }
 }
 

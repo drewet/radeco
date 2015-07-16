@@ -18,7 +18,7 @@ pub type Block = NodeIndex;
 pub type Node = NodeIndex;
 
 pub struct SSAConstruction<'a> {
-	ssa:              &'a mut SSAStorage,
+	pub ssa:          &'a mut SSAStorage,
 	variables:        Vec<VarId>, // assume consequtive integers?
 	sealed_blocks:    HashSet<Block>, // replace with bitfield
 	current_def:      HashMap<VarId, HashMap<Block, Node>>,
@@ -90,7 +90,7 @@ impl<'a> SSAConstruction<'a> {
 		}
 		self.sealed_blocks.insert(block);
 	}
-
+	/*
 	pub fn run(&mut self, cfg: &CFG) {
 		let mut blocks = Vec::<Block>::new();
 		for i in 0..cfg.g.node_count() {
@@ -128,58 +128,7 @@ impl<'a> SSAConstruction<'a> {
 		}
 		self.ssa.cleanup();
 	}
-
-	fn process_in(&mut self, block: Block, mval: &MVal) -> Node {
-		match mval.val_type {
-			MValType::Register  => self.read_variable(block, mval.name.clone()),
-			MValType::Temporary => self.read_variable(block, mval.name.clone()),
-			MValType::Unknown   => self.ssa.add_comment(block, &"Unknown".to_string()), // unimplemented!()
-			MValType::Internal  => self.ssa.add_comment(block, &mval.name), // unimplemented!()
-			MValType::Null      => NodeIndex::end(),
-		}
-	}
-
-	fn process_out(&mut self, block: Block, mval: &MVal, value: Node) {
-		match mval.val_type {
-			MValType::Register  => self.write_variable(block, mval.name.clone(), value),
-			MValType::Temporary => self.write_variable(block, mval.name.clone(), value),
-			MValType::Unknown   => {}, // unimplemented!(),
-			MValType::Internal  => {}, // unimplemented!()
-			MValType::Null      => {},
-		}
-	}
-
-	fn process_op(&mut self, block: Block, opc: MOpcode, n0: Node, n1: Node) -> Node {
-		if opc == MOpcode::OpEq {
-			return n0
-		}
-		// TODO: give correct integer type here
-		let nn = self.ssa.add_op(block, opc, ValueType::Integer{width: 64});
-		self.ssa.op_use(nn, 0, n0);
-		self.ssa.op_use(nn, 1, n1);
-		return nn
-	}
-
-	fn process_block(&mut self, block: Block, source: &BasicBlock) {
-		for ref instruction in &source.instructions {
-			let n0 = self.process_in(block, &instruction.operand_1);
-			let n1 = self.process_in(block, &instruction.operand_2);
-
-			if instruction.opcode == MOpcode::OpJmp {
-				//TODO
-				//self.ssa.g.add_edge(block, n0, SSAEdgeData::DynamicControl(0));
-				break;
-			}
-
-			if instruction.opcode == MOpcode::OpCJmp {
-				self.ssa.mark_selector(n0);
-				continue;
-			}
-
-			let nn = self.process_op(block, instruction.opcode, n0, n1);
-			self.process_out(block, &instruction.dst, nn);
-		}
-	}
+	*/
 
 	fn read_variable_recursive(&mut self, variable: VarId, block: Block) -> Node {
 		let mut val;
