@@ -6,7 +6,7 @@ use petgraph::graph::NodeIndex;
 use frontend::structs::LRegInfo;
 use middle::ssa::NodeData as SSANodeData;
 use middle::ssa::EdgeData as SSAEdgeData;
-use middle::ssa::{SSAStorage, NodeData}; //, ValueType};
+use middle::ssa::{SSAStorage, NodeData, BBInfo}; //, ValueType};
 use std::collections::{HashSet, HashMap};
 
 pub type VarId = String; // consider transitioning to &str
@@ -78,8 +78,8 @@ impl<'a> SSAConstruction<'a> {
 		return n
 	}
 
-	pub fn add_block(&mut self) -> Block {
-		let block = self.ssa.add_block();
+	pub fn add_block(&mut self, info: BBInfo) -> Block {
+		let block = self.ssa.add_block(info);
 		self.incomplete_phis.insert(block, HashMap::new());
 		block
 	}

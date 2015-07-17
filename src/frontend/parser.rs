@@ -12,7 +12,8 @@ use petgraph::graph::NodeIndex;
 
 use super::{MInst, MVal, MOpcode, MValType, Address, MArity, MRegInfo, MAddr};
 use super::structs::{LOpInfo, LAliasInfo, LRegInfo, LRegProfile, LFlagInfo};
-use super::super::middle::ssa::{SSAStorage, SSA, ValueType};
+use super::super::middle::ssa::{SSAStorage, ValueType, BBInfo};
+use super::super::middle::ssa::EdgeData as SSAEdgeData;
 use super::super::transform::ssa::{SSAConstruction, Node, Block};
 
 // Macro to return a new hash given (key, value) tuples.
@@ -47,6 +48,7 @@ pub enum ParseError {
 pub struct Parser<'a> {
     stack:        Vec<MVal>,
     insts:        Vec<MInst>,
+    allinsts:     Vec<MInst>,
     opset:        HashMap<&'a str, MOpcode>,
     regset:       HashMap<String, LRegProfile>,
     alias_info:   HashMap<String, LAliasInfo>,
@@ -105,6 +107,7 @@ impl<'a> Parser<'a> {
         Parser { 
             stack:        Vec::new(),
             insts:        Vec::new(),
+            allinsts:     Vec::new(),
             opset:        init_opset(),
             regset:       regset,
             default_size: default_size,
@@ -124,9 +127,10 @@ impl<'a> Parser<'a> {
     }
 
     pub fn set_register_profile(&mut self, reg_info: &LRegInfo, ssa: &'a mut SSAStorage) {
+        // TODO: use SSA methods instead of SSAStorage methods
         self.ssac = Some(SSAConstruction::new(ssa, reg_info));
 
-        if let Some(ref mut ssac) = self.ssac { self.block = ssac.add_block(); } else { unreachable!(); } // TODO: Remove this
+        //if let Some(ref mut ssac) = self.ssac { self.block = ssac.add_block(); } else { unreachable!(); } // TODO: Remove this
 
         self.regset = HashMap::new();
         let mut tmp: HashMap<String, LAliasInfo> = HashMap::new();
@@ -146,10 +150,14 @@ impl<'a> Parser<'a> {
     pub fn run(&mut self, mut ops: Vec<LOpInfo>, start: Address) -> Result<(), ParseError> {
         // TODO: Accept hints on bb beginnings (with corresponding entries in self.bbworklist and self.bbs)
 
+        let mut edges: Vec<(Address, Address, u8)> = Vec::new();
+
         ops.sort_by(|a, b| a.offset.unwrap().cmp(&b.offset.unwrap()));
 
         self.bbworklist.push(start);
         while let Some(top) = self.bbworklist.pop() {
+
+            // check for existing blocks
             if let Some((&addr, &(ni, end))) = self.bbs.range(Bound::Unbounded, Bound::Included(&top)).next_back() {
                 if addr == top && ni != NodeIndex::end() {
                     // this block already exists
@@ -161,41 +169,111 @@ impl<'a> Parser<'a> {
                     self.bbs.insert(addr, (NodeIndex::end(), addr));
                 }
             }
+
             // determine where we have to stop picking up instructions
-            let nbound = if let Some((&naddr, _)) = self.bbs.range(Bound::Excluded(&top), Bound::Unbounded).next() {
+            let mut nbound = if let Some((&naddr, _)) = self.bbs.range(Bound::Excluded(&top), Bound::Unbounded).next() {
                 // at the next bb
                 Bound::Excluded(naddr)
             } else {
                 // not at all
                 Bound::Unbounded
             };
-            // add the new block to the ssa graph and remember it
-            self.block = {
-                let ssac = self.ssac.as_mut().unwrap();
-                ssac.add_block()
-            };
+
+            // TODO: consider .size of LOpInfo so we don't get confused by overlapping instructions
+
+            // get index of first lexed instruction
             let mut i = match ops.binary_search_by(|probe| probe.offset.unwrap().cmp(&top)) {
                 Ok(i) => i,
                 Err(i) => i,
             };
-            let mut pc = top;
+
+            // process from here on
+            let mut bbstart = top;
+            let mut pc = bbstart;
+            let mut prevpc = pc; // what a mess
+            let mut newbb: bool = true;
             while i < ops.len() {
+
+                // check if we've reached the end
                 pc = ops[i].offset.unwrap();
                 if match nbound {
                     Bound::Excluded(end) => pc >= end,
+                    Bound::Included(end) => pc > end,
                     _ => false,
                 } { break }
 
+                if newbb {
+                    newbb = true;
+                    self.bbs.insert(bbstart, (self.block, pc));
+                    bbstart = pc;
+                    if prevpc != bbstart {edges.push((prevpc, bbstart, 0));}
+                    // add the new block to the ssa graph and remember it
+                    self.block = {
+                        let ssac = self.ssac.as_mut().unwrap();
+                        ssac.add_block(BBInfo{addr: pc})
+                    };
+                }
+
+                prevpc = pc;
+
                 // okay
-                // TODO: on (c)jmp add new block, add to worklist, update nbound
                 try!(self.parse_opinfo(&ops[i]));
+
+                // process jumps
+                for inst in &self.insts {
+                    if inst.opcode == MOpcode::OpJmp {
+                        // end is earlier
+                        nbound = Bound::Included(pc);
+
+                        // if we can determine the target of the jump investigate target
+                        if let Some(target) = self.read_const(&inst.operand_1) {
+                            self.bbworklist.push(target);
+                            edges.push((bbstart, target, 9));
+                        }
+                    } else if inst.opcode == MOpcode::OpCJmp {
+                        newbb = true;
+
+                        // see above
+                        if let Some(target) = self.read_const(&inst.operand_2) {
+                            self.bbworklist.push(target);
+                            edges.push((bbstart, target, 1));
+                        } else {
+                            println!("Can't tell target of {:?}", inst);
+                        }
+                    }
+                }
+
+                // keep insts for cfg generation
+                self.allinsts.extend(self.insts.clone()); // TODO: no unneccesary copy
+                self.insts = Vec::new();
 
                 // next
                 i+=1;
             }
-            self.bbs.insert(top, (self.block, pc));
+
+            self.bbs.insert(bbstart, (self.block, pc));
+        }
+        {
+            let ssa = &mut self.ssac.as_mut().unwrap().ssa;
+            for (ref source, ref target, i) in edges {
+                ssa.g.add_edge(
+                    self.bbs[source].0,
+                    self.bbs[target].0,
+                    SSAEdgeData::Control(i));
+            }
+        }
+        for (_, &(ref ni, _)) in &self.bbs {
+            self.ssac.as_mut().unwrap().seal_block(*ni);
         }
         Ok(())
+    }
+
+    pub fn read_const(&self, val: &MVal) -> Option<u64> {
+        if let &MVal { val_type: MValType::Temporary, node: Some(ni), .. } = val {
+            self.ssac.as_ref().unwrap().ssa.read_const(ni)
+        } else {
+            None
+        }
     }
 
     pub fn set_flags(&mut self, flags: &Vec<LFlagInfo>) {
@@ -365,14 +443,14 @@ impl<'a> Parser<'a> {
     pub fn emit_insts(&mut self) -> Vec<MInst> {
         let mut res: Vec<MInst> = Vec::new();
         {
-            let mut insts_iter = self.insts.iter();
+            let mut insts_iter = self.allinsts.iter();
             while let Some(inst) = insts_iter.next() {
                 Self::emit_inst(&inst, &mut res, &mut insts_iter);
             }
         }
 
-        self.insts = res;
-        return (self).insts.clone();
+        self.allinsts = res;
+        return (self).allinsts.clone();
     }
 
     pub fn emit_inst(inst: &MInst, res: &mut Vec<MInst>, insts_iter: &mut slice::Iter<MInst>) {
@@ -640,7 +718,7 @@ impl<'a> Parser<'a> {
             MValType::Register  => ssac.read_variable(block, mval.name.clone()),
             MValType::Temporary => mval.node.unwrap(), //ssac.read_variable(block, mval.name.clone()),
             MValType::Unknown   => ssac.ssa.add_comment(block, &"Unknown".to_string()), // unimplemented!()
-            MValType::Internal  => panic!("popping this value from the stack dissolves 'internal's"), // unimplemented!()
+            MValType::Internal  => ssac.ssa.add_comment(block, &mval.name), // unimplemented!()
             MValType::Null      => NodeIndex::end(),
         }
     }

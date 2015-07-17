@@ -16,6 +16,11 @@ pub enum ValueType {
 }
 
 #[derive(Clone, Debug)]
+pub struct BBInfo {
+	pub addr: u64
+}
+
+#[derive(Clone, Debug)]
 pub enum NodeData {
 	Op(ir::MOpcode, ValueType),
 	Comment(String),
@@ -23,7 +28,7 @@ pub enum NodeData {
 	Phi(String),
 	Undefined,
 	Removed,
-	BasicBlock
+	BasicBlock(BBInfo)
 }
 
 #[derive(Clone, Copy)]
@@ -41,7 +46,7 @@ impl SSAStorage {
 		SSAStorage {
 			g: Graph::new(),
 			needs_cleaning: false,
-			stable_indexing: false,
+			stable_indexing: true,
 		}
 	}
 
@@ -75,8 +80,16 @@ impl SSAStorage {
 		n
 	}
 
-	pub fn add_block(&mut self) -> NodeIndex {
-		self.g.add_node(NodeData::BasicBlock)
+	pub fn add_block(&mut self, info: BBInfo) -> NodeIndex {
+		self.g.add_node(NodeData::BasicBlock(info))
+	}
+
+	pub fn read_const(&self, ni: NodeIndex) -> Option<u64> {
+		if let &NodeData::Op(ir::MOpcode::OpConst(n), _) = &self.g[ni] {
+			Some(n)
+		} else {
+			None
+		}
 	}
 
 	// TODO: Reuse code between args_of/uses_of/preds_of/succs_of
@@ -278,14 +291,15 @@ impl GraphDot for SSAStorage {
 	}
 
 	fn edge_attrs(&self, edge: &Edge<EdgeData>) -> DotAttrBlock {
-		let target_is_bb = if let NodeData::BasicBlock = self.g[edge.target()] { true } else { false };
+		let target_is_bb = if let NodeData::BasicBlock(_) = self.g[edge.target()] { true } else { false };
 
 		DotAttrBlock::Attributes(match edge.weight {
 			EdgeData::Control(_) if !target_is_bb
 				=> vec![("color".to_string(), "red".to_string())],
 
-			EdgeData::Control(_)
-				=> vec![("color".to_string(), "blue".to_string())],
+			EdgeData::Control(i)
+				=> vec![("color".to_string(), "blue".to_string()),
+				        ("label".to_string(), format!("{}", i))],
 
 			EdgeData::Data(i)
 				=> vec![("dir".to_string(),   "back".to_string()),
@@ -305,6 +319,7 @@ impl GraphDot for SSAStorage {
 	fn node_attrs(&self, node: &NodeData) -> DotAttrBlock {
 		let l = match node {
 			&NodeData::Op(opc, ValueType::Integer{width: w}) => format!("[i{}] {:?}", w, opc),
+			&NodeData::BasicBlock(BBInfo{addr}) => format!("@{:x}", addr),
 			_ => format!("{:?}", node)
 		};
 		DotAttrBlock::Raw(format!(" [label=\"{}\"]", l.replace("\"", "\\\"")))
@@ -384,7 +399,7 @@ impl SSA for SSAStorage {
         let mut blocks = Vec::<NodeIndex>::new();
         for i in (0..len).map(|x| NodeIndex::new(x)).collect::<Vec<NodeIndex>>().iter() {
             match self.g[*i] {
-                NodeData::BasicBlock => blocks.push(i.clone()),
+                NodeData::BasicBlock(_) => blocks.push(i.clone()),
                 _ => continue,
             }
         }
