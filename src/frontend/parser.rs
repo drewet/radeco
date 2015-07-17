@@ -6,6 +6,7 @@ use std::collections::Bound;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::cmp;
+use std::slice;
 use regex::Regex;
 use petgraph::graph::NodeIndex;
 
@@ -142,8 +143,12 @@ impl<'a> Parser<'a> {
         self.alias_info = tmp.clone();
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, mut ops: Vec<LOpInfo>, start: Address) -> Result<(), ParseError> {
         // TODO: Accept hints on bb beginnings (with corresponding entries in self.bbworklist and self.bbs)
+
+        ops.sort_by(|a, b| a.offset.unwrap().cmp(&b.offset.unwrap()));
+
+        self.bbworklist.push(start);
         while let Some(top) = self.bbworklist.pop() {
             if let Some((&addr, &(ni, end))) = self.bbs.range(Bound::Unbounded, Bound::Included(&top)).next_back() {
                 if addr == top && ni != NodeIndex::end() {
@@ -156,19 +161,41 @@ impl<'a> Parser<'a> {
                     self.bbs.insert(addr, (NodeIndex::end(), addr));
                 }
             }
-            let nbound = if let Some((&naddr, &nni)) = self.bbs.range(Bound::Excluded(&top), Bound::Unbounded).next() {
+            // determine where we have to stop picking up instructions
+            let nbound = if let Some((&naddr, _)) = self.bbs.range(Bound::Excluded(&top), Bound::Unbounded).next() {
+                // at the next bb
                 Bound::Excluded(naddr)
             } else {
+                // not at all
                 Bound::Unbounded
             };
+            // add the new block to the ssa graph and remember it
             self.block = {
                 let ssac = self.ssac.as_mut().unwrap();
                 ssac.add_block()
             };
-            let pc = top;
-            // TODO: process instructions, advance 'pc'
+            let mut i = match ops.binary_search_by(|probe| probe.offset.unwrap().cmp(&top)) {
+                Ok(i) => i,
+                Err(i) => i,
+            };
+            let mut pc = top;
+            while i < ops.len() {
+                pc = ops[i].offset.unwrap();
+                if match nbound {
+                    Bound::Excluded(end) => pc >= end,
+                    _ => false,
+                } { break }
+
+                // okay
+                // TODO: on (c)jmp add new block, add to worklist, update nbound
+                try!(self.parse_opinfo(&ops[i]));
+
+                // next
+                i+=1;
+            }
             self.bbs.insert(top, (self.block, pc));
         }
+        Ok(())
     }
 
     pub fn set_flags(&mut self, flags: &Vec<LFlagInfo>) {
@@ -340,23 +367,29 @@ impl<'a> Parser<'a> {
         {
             let mut insts_iter = self.insts.iter();
             while let Some(inst) = insts_iter.next() {
-                if inst.opcode != MOpcode::OpIf && inst.opcode != MOpcode::OpJmp {
-                    res.push(inst.clone());
-                    continue;
-                }
+                Self::emit_inst(&inst, &mut res, &mut insts_iter);
+            }
+        }
 
-                if inst.opcode == MOpcode::OpJmp {
-                    while let Some(_inst) = insts_iter.next() {
-                        if _inst.addr.val != inst.addr.val {
-                            res.push(inst.clone());
-                            res.push(_inst.clone());
-                            break;
-                        }
+        self.insts = res;
+        return (self).insts.clone();
+    }
+
+    pub fn emit_inst(inst: &MInst, res: &mut Vec<MInst>, insts_iter: &mut slice::Iter<MInst>) {
+        match inst.opcode {
+
+            MOpcode::OpJmp => {
+                while let Some(_inst) = insts_iter.next() {
+                    if _inst.addr.val != inst.addr.val {
+                        res.push(inst.clone());
                         res.push(_inst.clone());
+                        break;
                     }
-                    continue;
+                    res.push(_inst.clone());
                 }
+            },
 
+            MOpcode::OpIf => {
                 let mut jmp_inst = None;
                 while let Some(_inst) = insts_iter.next() {
                     if _inst.opcode == MOpcode::OpCl {
@@ -371,15 +404,16 @@ impl<'a> Parser<'a> {
                         MInst::new(MOpcode::OpCJmp, MVal::null(),
                         inst.operand_1.clone(),
                         _inst.clone().operand_1, Some(inst.addr.clone()))
-                        );
+                    );
                 }
 
                 res.push(jmp_inst.unwrap());
-            }
-        }
+            },
 
-        self.insts = res;
-        return (self).insts.clone();
+            _ => {
+                res.push(inst.clone());
+            }
+        };
     }
 
     fn get_tmp_register(&mut self, mut size: u8) -> MVal {

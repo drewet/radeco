@@ -4,13 +4,9 @@
 use petgraph::EdgeDirection;
 use petgraph::graph::NodeIndex;
 use frontend::structs::LRegInfo;
-use middle::cfg::NodeData as CFGNodeData;
-use middle::cfg::EdgeType as CFGEdgeType;
-use middle::cfg::{CFG, BasicBlock};
 use middle::ssa::NodeData as SSANodeData;
 use middle::ssa::EdgeData as SSAEdgeData;
-use middle::ssa::{SSAStorage, NodeData, ValueType};
-use middle::ir::{MVal, MOpcode, MValType};
+use middle::ssa::{SSAStorage, NodeData}; //, ValueType};
 use std::collections::{HashSet, HashMap};
 
 pub type VarId = String; // consider transitioning to &str
