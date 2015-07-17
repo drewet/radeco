@@ -1,5 +1,6 @@
 //! Module to contain the IR.
 
+use petgraph::graph::NodeIndex;
 pub type Address = u64;
 
 //pub struct MCommon {
@@ -80,6 +81,7 @@ pub struct MVal {
     pub val_type: MValType,
     pub reg_info: Option<MRegInfo>,
     pub typeset:  u32,
+    pub node:     Option<NodeIndex>
 }
 
 // Minor: Change MInst to take Option<MVal> instead. This will allow us to eliminate MVal::null and
@@ -87,8 +89,8 @@ pub struct MVal {
 #[derive(Debug, Clone)]
 pub struct MInst {
     pub addr:      MAddr,
-    pub opcode:    MOpcode,
     pub dst:       MVal,
+    pub opcode:    MOpcode,
     pub operand_1: MVal,
     pub operand_2: MVal,
 }
@@ -155,6 +157,7 @@ impl MVal {
             val_type: val_type,
             typeset:  typeset,
             reg_info: reg_info,
+            node:     None
         }
     }
 
@@ -172,8 +175,8 @@ impl MInst {
         let addr = _addr.unwrap_or_default();
         MInst {
             addr:      addr,
-            opcode:    opcode,
             dst:       dst,
+            opcode:    opcode,
             operand_1: op1,
             operand_2: op2,
         }

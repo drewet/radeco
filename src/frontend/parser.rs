@@ -429,11 +429,11 @@ impl<'a> Parser<'a> {
         if op.size >= size {
             return;
         }
-        let dst = self.get_tmp_register(size);
+        let mut dst = self.get_tmp_register(size);
         let operator = MOpcode::OpWiden(size);
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(operator, dst.clone(), op.clone(), MVal::null(), Some(addr));
-        self.push_inst(inst.clone());
+        dst = self.push_inst(inst.clone());
         *op = dst;
     }
 
@@ -442,11 +442,11 @@ impl<'a> Parser<'a> {
         if op.size <= size {
             return;
         }
-        let dst = self.get_tmp_register(size);
+        let mut dst = self.get_tmp_register(size);
         let operator = MOpcode::OpNarrow(size);
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(operator, dst.clone(), op.clone(), MVal::null(), Some(addr));
-        self.push_inst(inst.clone());
+        dst = self.push_inst(inst.clone());
         *op = dst;
     }
 
@@ -565,16 +565,17 @@ impl<'a> Parser<'a> {
         }
 
         dst.size = dst_size;
-        
-        // If it is a compare instruction, then the flags must be updated.
-        if op == MOpcode::OpCmp {
-            self.last_assgn = dst.clone();
-        }
+
 
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(op, dst.clone(), op2, op1, Some(addr));
-        self.push_inst(inst);
-        self.stack.push(dst);
+        let dst_n = self.push_inst(inst);
+        self.stack.push(dst_n.clone());
+        
+        // If it is a compare instruction, then the flags must be updated.
+        if op == MOpcode::OpCmp {
+            self.last_assgn = dst_n;
+        }
 
         Ok(())
     }
@@ -593,8 +594,7 @@ impl<'a> Parser<'a> {
                         'z' => {
                             let dst = self.get_tmp_register(1);
                             let inst = MInst::new(MOpcode::OpCmp, dst.clone(), self.last_assgn.clone(), self.constant_value(0), Some(addr));
-                            self.push_inst(inst);
-                            dst
+                            self.push_inst(inst)
                         },
                         //'b' => _ // OpIFBorrow(u8),
                         //'c' => _ // OpIFCarry(u8),
@@ -618,31 +618,19 @@ impl<'a> Parser<'a> {
         let dst = self.get_tmp_register(size);
         let addr = MAddr::new(self.addr);
         let inst = MInst::new(op, dst.clone(), MVal::null(), MVal::null(), Some(addr));
-        self.push_inst(inst);
-        dst
+        self.push_inst(inst)
     }
 
-    fn push_inst(&mut self, instruction: MInst) {
+    fn push_inst(&mut self, instruction: MInst) -> MVal {
         self.insts.push(instruction.clone());
 
         let block = self.block;
         let n0 = self.process_in(block, &instruction.operand_1);
         let n1 = self.process_in(block, &instruction.operand_2);
-
-        if instruction.opcode == MOpcode::OpJmp {
-            //TODO
-            //self.ssa.g.add_edge(block, n0, SSAEdgeData::DynamicControl(0));
-            return;
-        }
-
-        // TODO
-        // if instruction.opcode == MOpcode::OpCJmp {
-        //     self.ssa.mark_selector(n0);
-        //     continue;
-        // }
-
         let nn = self.process_op(block, instruction.opcode, n0, n1);
         self.process_out(block, &instruction.dst, nn);
+
+        MVal { node: Some(nn), val_type: MValType::Temporary, .. instruction.dst }
     }
 
     fn process_in(&mut self, block: Block, mval: &MVal) -> Node {
@@ -650,9 +638,9 @@ impl<'a> Parser<'a> {
 
         match mval.val_type {
             MValType::Register  => ssac.read_variable(block, mval.name.clone()),
-            MValType::Temporary => ssac.read_variable(block, mval.name.clone()),
+            MValType::Temporary => mval.node.unwrap(), //ssac.read_variable(block, mval.name.clone()),
             MValType::Unknown   => ssac.ssa.add_comment(block, &"Unknown".to_string()), // unimplemented!()
-            MValType::Internal  => ssac.ssa.add_comment(block, &mval.name), // unimplemented!()
+            MValType::Internal  => panic!("popping this value from the stack dissolves 'internal's"), // unimplemented!()
             MValType::Null      => NodeIndex::end(),
         }
     }
@@ -661,7 +649,7 @@ impl<'a> Parser<'a> {
         let ssac = self.ssac.as_mut().unwrap();
         match mval.val_type {
             MValType::Register  => ssac.write_variable(block, mval.name.clone(), value),
-            MValType::Temporary => ssac.write_variable(block, mval.name.clone(), value),
+            MValType::Temporary => {}, // ssac.write_variable(block, mval.name.clone(), value),
             MValType::Unknown   => {}, // unimplemented!(),
             MValType::Internal  => {}, // unimplemented!()
             MValType::Null      => {},
