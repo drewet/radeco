@@ -1,5 +1,5 @@
 [package]
-name = "radeco"
+name = "radeco-lib"
 version = "0.1.0"
 authors = [
 	"David Kreuter <dkreuter@gmail.com>",
@@ -10,5 +10,7 @@ authors = [
 regex = "*"
 petgraph = "*"
 num = "*"
-r2pipe = "*"
 rustc-serialize = "*"
+
+[dependencies.r2pipe]
+git = "https://github.com/radare/r2pipe.rs"
