@@ -1,3 +1,10 @@
+// Copyright (c) 2015, The Radare Project. All rights reserved.
+// See the COPYING file at the top-level directory of this distribution.
+// Licensed under the BSD 3-Clause License:
+// <http://opensource.org/licenses/BSD-3-Clause>
+// This file may not be copied, modified, or distributed
+// except according to those terms.
+
 //! Implements parser to convert from ESIL to RadecoIR.
 
 use num::traits::Num;
@@ -40,10 +47,10 @@ pub enum ParseError {
 
 #[allow(dead_code)]
 #[derive(Clone)]
-pub struct Parser<'a> {
+pub struct Parser {
 	stack:        Vec<MVal>,
 	insts:        Vec<MInst>,
-	opset:        HashMap<&'a str, MOpcode>,
+	opset:        HashMap<String, MOpcode>,
 	regset:       HashMap<String, LRegProfile>,
 	alias_info:   HashMap<String, LAliasInfo>,
 	flags:        HashMap<u64, LFlagInfo>,
@@ -56,19 +63,20 @@ pub struct Parser<'a> {
 	constants:	  HashMap<u64, MVal>,
 }
 
-// Struct used to configure the Parser. If `None` is passed to any of the fields, then the default
+// Struct used to configure the Parser.
+// If `None` is passed to any of the fields, then the default
 // values are set.
-pub struct ParserConfig<'a> {
+pub struct ParserConfig {
 	arch:         Option<String>,
 	default_size: Option<WidthSpec>,
 	tmp_prefix:   Option<String>,
-	init_opset:   Option<fn() -> HashMap<&'a str, MOpcode>>,
+	init_opset:   Option<fn() -> HashMap<String, MOpcode>>,
 	regset:       Option<HashMap<String, LRegProfile>>,
 	alias_info:   Option<HashMap<String, LAliasInfo>>,
 	flags:        Option<HashMap<u64, LFlagInfo>>,
 }
 
-impl<'a> Default for ParserConfig<'a> {
+impl Default for ParserConfig {
 	fn default() -> Self {
 		ParserConfig {
 			arch:         Some("x86_64".to_string()),
@@ -82,8 +90,8 @@ impl<'a> Default for ParserConfig<'a> {
 	}
 }
 
-impl<'a> Parser<'a> {
-	pub fn new(config: Option<ParserConfig<'a>>) -> Parser<'a> {
+impl Parser {
+	pub fn new(config: Option<ParserConfig>) -> Parser {
 		let config = config.unwrap_or_default();
 		let arch = config.arch.unwrap_or("x86_64".to_string());
 		let default_size = config.default_size.unwrap_or(64);
@@ -195,13 +203,13 @@ impl<'a> Parser<'a> {
 					size = r.size as WidthSpec;
 				} else if let Ok::<i64, _>(v) = hex_to_i!(token) { // <u64>? will it be able to deal with negative numbers?
 					val = Some(v as u64);
-				} else if let Some('%') = token.chars().nth(0) {
+				} else if let Some('$') = token.chars().nth(0) {
 					val_type = MValType::Internal
 				} else {
 					// TODO
 					panic!("Proper error handling here");
 				}
-				
+
 				let v = if let Some(cv) = val {
 					self.constant_value(cv)
 				} else {
@@ -522,7 +530,7 @@ impl<'a> Parser<'a> {
 		tmp_p.addr = self.addr;
 		tmp_p.constants = self.constants.clone();
 		match mv.name.chars().nth(1).unwrap_or('\0') {
-			'%' => {
+			'$' => {
 				let addr = self.addr;
 				return Ok(self.constant_value(addr))
 			},
@@ -572,7 +580,7 @@ impl<'a> Parser<'a> {
 				return Ok(self.constant_value(def));
 			},
 			'o' => {
-				//(esil_internal_carry_check (esil, esil->lastsz-1) ^ 
+				//(esil_internal_carry_check (esil, esil->lastsz-1) ^
 				// esil_internal_carry_check (esil, esil->lastsz-2));
 				for i in (1..3) {
 					tmp_p.stack.push(MVal::esilcur());
@@ -629,7 +637,8 @@ impl<'a> Parser<'a> {
 			let size = self.default_size;
 			let mut next_tmp = self.get_tmp_register(size);
 			next_tmp.as_literal = Some(num);
-			let inst = op.to_inst(next_tmp.clone(), MVal::null(), MVal::null(), None);
+			let inst = op.to_inst(next_tmp.clone(), MVal::null(), MVal::null()
+			                                                    , None);
 			self.insts.push(inst);
 			next_tmp
 		} else {
@@ -637,40 +646,40 @@ impl<'a> Parser<'a> {
 		};
 
 		let const_v = self.constants.entry(num)
-			                        .or_insert(tmp)
-								    .clone();
-		
+		                            .or_insert(tmp)
+		                            .clone();
+
 		// Assert that we actually have a constant.
 		assert!(const_v.as_literal != None);
 		return const_v;
 	}
 }
 
-fn map_esil_to_opset() -> HashMap<&'static str, MOpcode> {
+fn map_esil_to_opset() -> HashMap<String, MOpcode> {
 	// Make a map from esil string to struct MOperator.
 	// (operator: &str, op: MOperator).
 	// Possible Optimization:  Move to compile-time generation ?
 	hash![
-		("==" , MOpcode::OpCmp),
-		("<"  , MOpcode::OpLt),
-		(">"  , MOpcode::OpGt),
-		("<=" , MOpcode::OpGteq),
-		(">=" , MOpcode::OpLteq),
-		("<<" , MOpcode::OpLsl),
-		(">>" , MOpcode::OpLsr),
-		("&"  , MOpcode::OpAnd),
-		("|"  , MOpcode::OpOr),
-		("="  , MOpcode::OpEq),
-		("*"  , MOpcode::OpMul),
-		("^"  , MOpcode::OpXor),
-		("+"  , MOpcode::OpAdd),
-		("-"  , MOpcode::OpSub),
-		("/"  , MOpcode::OpDiv),
-		("%"  , MOpcode::OpMod),
-		("?{" , MOpcode::OpIf),
-		("!"  , MOpcode::OpNot),
-		("--" , MOpcode::OpDec),
-		("++" , MOpcode::OpInc),
-		("}"  , MOpcode::OpCl)
+		("==".to_owned() , MOpcode::OpCmp),
+		("<" .to_owned() , MOpcode::OpLt),
+		(">" .to_owned() , MOpcode::OpGt),
+		("<=".to_owned() , MOpcode::OpGteq),
+		(">=".to_owned() , MOpcode::OpLteq),
+		("<<".to_owned() , MOpcode::OpLsl),
+		(">>".to_owned() , MOpcode::OpLsr),
+		("&" .to_owned() , MOpcode::OpAnd),
+		("|" .to_owned() , MOpcode::OpOr),
+		("=" .to_owned() , MOpcode::OpEq),
+		("*" .to_owned() , MOpcode::OpMul),
+		("^" .to_owned() , MOpcode::OpXor),
+		("+" .to_owned() , MOpcode::OpAdd),
+		("-" .to_owned() , MOpcode::OpSub),
+		("/" .to_owned() , MOpcode::OpDiv),
+		("%" .to_owned() , MOpcode::OpMod),
+		("?{".to_owned() , MOpcode::OpIf),
+		("!" .to_owned() , MOpcode::OpNot),
+		("--".to_owned() , MOpcode::OpDec),
+		("++".to_owned() , MOpcode::OpInc),
+		("}" .to_owned() , MOpcode::OpCl)
 			]
 }

@@ -1,3 +1,10 @@
+// Copyright (c) 2015, The Radare Project. All rights reserved.
+// See the COPYING file at the top-level directory of this distribution.
+// Licensed under the BSD 3-Clause License:
+// <http://opensource.org/licenses/BSD-3-Clause>
+// This file may not be copied, modified, or distributed
+// except according to those terms.
+
 //! Basic structs which are used for json encoding and decoding.
 
 use rustc_serialize::{Decodable, Decoder};
@@ -42,6 +49,23 @@ pub struct LFlagInfo {
 	pub offset: u64,
 	pub name:   String,
 	pub size:   u64,
+}
+
+#[derive(RustcDecodable, RustcEncodable, Debug, Clone, Default)]
+pub struct LBinInfo {
+	pub core: Option<LCoreInfo>,
+	pub bin: Option<LBin>,
+}
+
+#[derive(RustcDecodable, RustcEncodable, Debug, Clone, Default)]
+pub struct LCoreInfo {
+	pub file: Option<String>,
+	pub size: Option<usize>,
+}
+
+#[derive(RustcDecodable, RustcEncodable, Debug, Clone, Default)]
+pub struct LBin {
+	pub arch: Option<String>,
 }
 
 impl Decodable for LOpInfo {

@@ -1,3 +1,10 @@
+// Copyright (c) 2015, The Radare Project. All rights reserved.
+// See the COPYING file at the top-level directory of this distribution.
+// Licensed under the BSD 3-Clause License:
+// <http://opensource.org/licenses/BSD-3-Clause>
+// This file may not be copied, modified, or distributed
+// except according to those terms.
+
 //! Module that provides interaction with radare2.
 //! Uses r2pipe.
 
@@ -66,14 +73,27 @@ impl Search for Json {
 	}
 }
 
-// fn send and recv allow users to send their own commands, i.e. The ones that are not currently
-// abstracted by the R2 API.
+// fn send and recv allow users to send their own commands,
+// i.e. The ones that are not currently abstracted by the R2 API.
 // Ideally, all commonly used commands must be supported for easier use.
-
 impl R2 {
-	pub fn new(path: &str) -> R2 {
+	// TODO: Use an error type
+	pub fn new(path: Option<String>) -> Result<R2, String> {
+		if path.is_none() && !R2::in_session() {
+			let e = "No r2 session open. Please specify path!".to_owned();
+			return Err(e);
+		}
+
+		// This means that path is `Some` or we have an open session.
 		let pipe = open_pipe!(path).unwrap();
-		R2 { pipe: pipe, readin: String::new() }
+		Ok(R2 { pipe: pipe, readin: String::new() })
+	}
+
+	pub fn in_session() -> bool {
+		match R2Pipe::in_session() {
+			Some(_) => true,
+			None    => false,
+		}
 	}
 
 	pub fn from(r2p: R2Pipe) -> R2 {
@@ -93,7 +113,7 @@ impl R2 {
 	}
 
 	pub fn send(&mut self, cmd: &str) {
-		self.readin = self.pipe.cmd(cmd);
+		self.readin = self.pipe.cmd(cmd).unwrap();
 	}
 
 	pub fn recv(&mut self) -> String {
@@ -145,6 +165,12 @@ impl R2 {
 
 	pub fn get_flag_info(&mut self) -> DecodeResult<Vec<LFlagInfo>> {
 		self.send("fj");
+		let raw_json = self.recv();
+		json::decode(&*raw_json)
+	}
+
+	pub fn get_bin_info(&mut self) -> DecodeResult<LBinInfo> {
+		self.send("ij");
 		let raw_json = self.recv();
 		json::decode(&*raw_json)
 	}

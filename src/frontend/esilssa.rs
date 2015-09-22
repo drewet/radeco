@@ -1,3 +1,10 @@
+// Copyright (c) 2015, The Radare Project. All rights reserved.
+// See the COPYING file at the top-level directory of this distribution.
+// Licensed under the BSD 3-Clause License:
+// <http://opensource.org/licenses/BSD-3-Clause>
+// This file may not be copied, modified, or distributed
+// except according to those terms.
+
 //! Converts the from ESIL/CFG representation to SSA.
 
 use std::collections::HashMap;
@@ -20,7 +27,7 @@ pub type VarId = usize;
 
 const ESIL_CUR: usize = 0;
 const ESIL_OLD: usize = 1;
-const LASTSZ:  usize = 2;
+const LASTSZ:   usize = 2;
 
 pub struct SSAConstruction<'a, T>
 where T: 'a + Clone + Debug + Clone + SSAMod<BBInfo=BBInfo>
@@ -75,6 +82,8 @@ where T: 'a + Clone + Debug + Verify +
 				self.phiplacer.write_variable(block, i + 3, argnode);
 			}
 
+			self.phiplacer.sync_register_state(block);
+
 			blocks[cfg.entry.index()] = block;
 			let block = self.phiplacer.add_dynamic();
 			self.phiplacer.ssa.mark_exit_node(&block);
@@ -87,6 +96,7 @@ where T: 'a + Clone + Debug + Verify +
 			if let CFGNodeData::Block(ref srcbb) = cfg.g[*i] {
 				self.process_block(block, srcbb);
 			} else {
+				//println!("{:?}", cfg.g[*i]);
 				unreachable!();
 			}
 		}

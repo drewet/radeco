@@ -1,3 +1,10 @@
+// Copyright (c) 2015, The Radare Project. All rights reserved.
+// See the COPYING file at the top-level directory of this distribution.
+// Licensed under the BSD 3-Clause License:
+// <http://opensource.org/licenses/BSD-3-Clause>
+// This file may not be copied, modified, or distributed
+// except according to those terms.
+
 //! Module implements Pipeline and Runner structs to make radeco-lib easier to use.
 
 use ::frontend::parser::{Parser};
@@ -15,6 +22,7 @@ use ::middle::ssa::verifier;
 use std::io::prelude::*;
 use std::fs;
 use std::fs::{File};
+use std::fmt;
 use std::path::{PathBuf};
 
 macro_rules! out {
@@ -65,18 +73,18 @@ impl Pipeout {
 // States all the vars important to various stages of the pipeline together.
 // Also acts as the result struct.
 #[allow(dead_code)]
-pub struct State<'a> {
+pub struct State {
 	r2: Option<R2>,
 	esil: Option<Vec<String>>,
 	pub reg_info: Option<LRegInfo>,
-	p: Option<Parser<'a>>,
+	p: Option<Parser>,
 	cfg: Option<CFG>,
 	ssa: Option<SSAStorage>,
 	pub pipeout: Option<Pipeout>,
 }
 
-impl<'a> State<'a> {
-	fn new() -> State<'a> {
+impl State {
+	fn new() -> State {
 		State {
 			r2: None,
 			esil: None,
@@ -89,7 +97,7 @@ impl<'a> State<'a> {
 	}
 }
 
-pub struct Runner<'a> {
+pub struct Runner {
 	name: String,
 	bin_name: Option<String>,
 	addr: Option<String>,
@@ -97,14 +105,45 @@ pub struct Runner<'a> {
 	pipeline: Vec<Pipeline>,
 	results: Vec<Pipeout>,
 	outpath: String,
-	pub state: State<'a>,
+	pub state: State,
 }
 
-impl<'a> Runner<'a> {
+impl fmt::Display for Pipeline {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			Pipeline::ReadFromR2 => write!(f, "{}", "r2"),
+			Pipeline::ParseEsil => write!(f, "{}", "Parse ESIL"),
+			Pipeline::CFG => write!(f, "{}", "Control Flow Graph Construction"),
+			Pipeline::SSA => write!(f, "{}", "SSA Construction"),
+			Pipeline::AnalyzeSSA(_) => write!(f, "{}", "Constant Propagation"),
+			Pipeline::DCE => write!(f, "{}", "Dead Code Elimination"),
+			Pipeline::Verify => write!(f, "{}", "Verify SSA"),
+			Pipeline::CWriter => write!(f, "{}", "C Writer"),
+		}
+	}
+}
+
+impl fmt::Display for Runner {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let mut res;
+		res = format!("Name: {}\n", self.name);
+		res = format!("{}Binary: {}\n", res, self.bin_name.as_ref().unwrap_or(&"-".to_owned()));
+		res = format!("{}Address: {}\n", res, self.addr.as_ref().unwrap_or(&"-".to_owned()));
+		res = format!("{}Pipeline:\n", res);
+		for p in &self.pipeline {
+			res = format!("{}    - {}\n", res, p);
+		}
+		res = format!("{}Output: {}", res, self.outpath);
+		write!(f, "{}", res)
+	}
+}
+
+
+impl Runner {
 
 	pub fn new(name: String, bin_name: Option<String>,
                addr: Option<String>, verbose: bool,
-               pipeline: Vec<Pipeline>, outpath: Option<String>) -> Runner<'a>
+               pipeline: Vec<Pipeline>, outpath: Option<String>) -> Runner
 	{
 		Runner {
 			name: name,
@@ -118,6 +157,10 @@ impl<'a> Runner<'a> {
 		}
 	}
 
+	pub fn is_verbose(&self) -> bool {
+		self.verbose
+	}
+
 	fn set_reg_info(&mut self, reg_info: &LRegInfo) {
 		self.state.reg_info = Some(reg_info.clone());
 	}
@@ -127,18 +170,30 @@ impl<'a> Runner<'a> {
 	}
 
 	fn read_from_r2(&mut self) {
-		assert!(!self.bin_name.is_none());
-		assert!(!self.addr.is_none());
+		//assert!(!self.bin_name.is_none());
+		//assert!(!self.addr.is_none());
 		out!("[*] Reading from R2", self.verbose);
-		let bin_name = self.bin_name.clone().unwrap();
-		let mut r2 = R2::new(&*bin_name);
-		r2.init();
-		let reg_info = r2.get_reg_info().unwrap();
+
+		if self.state.r2.is_none() {
+			let bin_name = self.bin_name.clone();
+			// TODO: Error Handling
+			let mut _r2 = R2::new(bin_name).unwrap();
+			_r2.init();
+			self.state.r2 = Some(_r2);
+		}
+		let func_info;
+		let reg_info;
+		match self.state.r2.as_mut() {
+			Some(r2) => {
+				reg_info = r2.get_reg_info().unwrap();
+				let addr = self.addr.clone().unwrap();
+				func_info = r2.get_function(&*addr).unwrap();
+			},
+			None => panic!("Unable to Initialize r2. Something is wrong!"),
+		}
+
 		self.set_reg_info(&reg_info);
-		let addr = self.addr.clone().unwrap();
-		let func_info = r2.get_function(&*addr).unwrap();
 		self.set_pipeout(&Pipeout::LOpInfo(func_info.ops.unwrap()));
-		self.state.r2 = Some(r2);
 	}
 
 	fn parse_esil(&mut self) {
@@ -253,6 +308,7 @@ impl<'a> Runner<'a> {
 		}
 	}
 
+	// TODO: Return Error. Never panic!()
 	pub fn run(&mut self) {
 		let pipe_iter = self.pipeline.clone();
 		for stage in pipe_iter.iter() {
@@ -275,9 +331,16 @@ impl<'a> Runner<'a> {
 		file.write_all(res.as_bytes()).ok().expect("Error. Cannot write file!\n");
 	}
 
-	pub fn dump(&self) {
-		let mut phase_num = 1;
+	pub fn output(&self, phases: Option<Vec<u16>>) {
+		let mut phase_num = 0;
+		let count = self.pipeline.len() - 1;
+		let phases = phases.unwrap_or((0..count as u16).collect::<Vec<_>>());
 		for res in self.results.iter() {
+
+			if !phases.contains(&phase_num) {
+				phase_num += 1;
+				continue;
+			}
 			let mut write_out = String::new();
 			let mut ext;
 			match *res {
@@ -318,10 +381,9 @@ impl<'a> Runner<'a> {
 			// test_name-type-phase_num.ext
 			let mut p = PathBuf::from(&self.outpath);
 			p.push(self.name.clone());
-			let pstr = format!("{}-res_{}-phase{}", self.name, res.to_string(), phase_num.to_string());
+			let pstr = format!("{}-res_{}-phase{}.{}", self.name, res.to_string(), phase_num.to_string(), ext);
 			fs::create_dir_all(&p).ok();
 			p.push(pstr);
-			p.set_extension(ext);
 			self.write_file(p, write_out);
 			phase_num += 1;
 		}
